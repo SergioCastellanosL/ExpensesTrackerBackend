@@ -40,9 +40,55 @@ app.get("/users", async (req, res) => {
 app.post("/users", async (req, res) => {
 	const {username, password} = req.body;
 	try{
-		await pool.query("INSERT INTO users (username, password) VALUES ($1, $2)", [username, password]);
-		res.status(201).send("User added");
+		const result = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *", [username, password]);
+		res.status(201).json(result.rows[0]);
 	}catch(err){
+		console.error(err);
+		res.status(500).send("Database error");
+	}
+});
+
+app.put("/users/:id", async (req,res) =>{
+	const { id } = req.params;
+  	const { username, password } = req.body;
+	try {
+		const check = await pool.query(
+		"SELECT * FROM users WHERE username = $1 AND id != $2",
+		[username, id]
+		);
+		if (check.rows.length > 0) {
+		return res.status(409).json({ message: "Username already exists" });
+		}
+
+		const result = await pool.query(
+		"UPDATE users SET username = $1, password = $2 WHERE id = $3 RETURNING *",
+		[username, password, id]
+		);
+
+		if (result.rows.length === 0) {
+		return res.status(404).json({ message: "User not found" });
+		}
+		res.json(result.rows[0]);
+	} catch (err) {
+		console.error(err);
+		res.status(500).send("Database error");
+	}
+});
+
+app.delete("/users/:id", async (req, res) =>{
+	try {
+		const { id } = req.params;
+		const result = await pool.query(
+		"DELETE FROM users WHERE id = $1 RETURNING *",
+		[id]
+		);
+
+		if (result.rows.length === 0) {
+		return res.status(404).json({ message: "User not found" });
+		}
+
+		res.json({ message: "User deleted successfully", user: result.rows[0] });
+	} catch (err) {
 		console.error(err);
 		res.status(500).send("Database error");
 	}
