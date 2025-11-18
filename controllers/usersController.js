@@ -80,3 +80,23 @@ export const deleteUser = async (req,res) => {
 		res.status(500).send("Database error");
 	}
 }
+
+//Search users
+export const searchUsers = async (req, res) => {
+  const { search } = req.query;
+  try {
+    if (!search) {
+      return res.json([]);
+    }
+
+    const result = await pool.query(
+      "SELECT id, username FROM users WHERE LOWER(username) LIKE LOWER($1)",
+      [`%${search}%`]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
+  }
+};
