@@ -45,7 +45,7 @@ export const getAccounts = async (req, res) => {
 
 export const editAccount = async (req, res) => {
   const { accountId } = req.params;
-  const { name, type, balance, sharedWith } = req.body;
+  const { name, type, sharedWith } = req.body;
   const userId = req.user.id;
   try {
     const accessCheck = await pool.query(
@@ -59,8 +59,8 @@ export const editAccount = async (req, res) => {
 
     // Update account
     const updateResult = await pool.query(
-      "UPDATE accounts SET name = $1, type = $2, balance = $3 WHERE id = $4 RETURNING *",
-      [name, type, balance, accountId]
+      "UPDATE accounts SET name = $1, type = $2 WHERE id = $3 RETURNING *",
+      [name, type, accountId]
     );
 
     // Update shared users
@@ -116,5 +116,49 @@ export const deleteAccount = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Database error" });
+  }
+};
+
+//Get one account
+export const getAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const accountId = req.params.accountId;
+
+    const result = await pool.query(
+      `
+      WITH account_data AS (
+        SELECT a.*
+        FROM accounts a
+        JOIN users_accounts ua ON ua.account_id = a.id
+        WHERE a.id = $1 AND ua.user_id = $2
+      ),
+      shared_users AS (
+        SELECT u.id, u.username
+        FROM users u
+        JOIN users_accounts ua ON ua.user_id = u.id
+        WHERE ua.account_id = $1
+        AND u.id <> $2  -- exclude current user
+      )
+      SELECT 
+        ad.*,
+        COALESCE(
+          (SELECT json_agg(su) FROM shared_users su),
+          '[]'::json
+        ) AS "sharedWith"
+      FROM account_data ad;
+      `,
+      [accountId, userId]
+    );
+
+    //user does NOT have access
+    if (result.rows.length === 0) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
   }
 };
